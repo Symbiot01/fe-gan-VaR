@@ -1,0 +1,54 @@
+# Dockerfile for A100 GPU environment
+# Pre-builds dependencies to minimize pipeline startup time
+#
+# Build: docker build -f Dockerfile.a100 -t fe-gan-var:a100 .
+# Run:   docker run --gpus all -v $(pwd):/workspace fe-gan-var:a100 bash scripts/a100_pipeline.sh
+
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python and essentials
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3.10-venv \
+    python3-pip \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python defaults
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+
+# Upgrade pip
+RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA 12.1 support
+RUN python -m pip install --no-cache-dir \
+    torch==2.2.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# Install other dependencies (pinned versions for reproducibility)
+RUN python -m pip install --no-cache-dir \
+    numpy==1.26.4 \
+    pandas==2.2.0 \
+    requests==2.31.0 \
+    yfinance==0.2.36 \
+    omegaconf==2.3.0 \
+    tqdm==4.66.1 \
+    matplotlib==3.8.2 \
+    seaborn==0.13.2 \
+    pytest==7.4.4
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy project files (data is committed, so it's included)
+COPY . /workspace/
+
+# Install package in dev mode
+RUN python -m pip install --no-cache-dir -e .
+
+# Default command: run the A100 pipeline
+CMD ["bash", "scripts/a100_pipeline.sh"]
