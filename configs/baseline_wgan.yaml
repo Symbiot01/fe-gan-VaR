@@ -1,0 +1,24 @@
+# Baseline WGAN configuration (vanilla GAN without FE)
+# Paper: 300 epochs for baseline to capture convergence comparison
+model_type: wgan
+loss_type: wgan
+
+# Architecture (from Chen 2024)
+noise_dim: 100
+gen_depth: 10
+gen_width: 1000
+critic_depth: 5
+critic_width: 100
+hist_dim: 250
+
+# Training
+epochs: 300
+batch_size: 100
+n_critic: 5
+clip_value: 0.01
+lr: 5.0e-5
+
+# Evaluation
+alpha: 0.05
+eval_every: 10
+eval_samples: 1000

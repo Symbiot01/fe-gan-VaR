@@ -1,0 +1,29 @@
+# FE-GAN with historical context and Tail-GAN loss
+# Paper: 100 epochs, uses Fissler-Ziegel score for tail risk
+model_type: fegan
+loss_type: tailgan
+
+# Architecture (from Chen 2024)
+noise_dim: 100
+gen_depth: 10
+gen_width: 1000
+critic_depth: 5
+critic_width: 100
+hist_dim: 250
+preproc_hidden: 512
+preproc_feat_dim: 250
+
+# Training
+epochs: 100
+batch_size: 100
+n_critic: 5
+clip_value: 0.01
+lr: 5.0e-5
+
+# Tail-GAN specific
+alpha: 0.05
+tailgan_wgan_weight: 0.5  # balance between WGAN and FZ loss
+
+# Evaluation
+eval_every: 10
+eval_samples: 1000
