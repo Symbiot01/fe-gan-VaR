@@ -1,0 +1,24 @@
+# Sweep configuration for Plan A: paper verification
+# 3 configs x 100 seeds = 300 runs
+
+# Global settings
+workers: 10
+use_amp: true
+cudnn_benchmark: true
+
+# Configurations to sweep
+configs:
+  - name: baseline_wgan
+    path: configs/baseline_wgan.yaml
+    epochs: 300  # Paper: baseline needs more epochs
+    seeds: 100
+
+  - name: fegan_hist_wgan
+    path: configs/fegan_hist_wgan.yaml
+    epochs: 100  # Paper: FE-GAN converges faster
+    seeds: 100
+
+  - name: fegan_hist_tailgan
+    path: configs/fegan_hist_tailgan.yaml
+    epochs: 100
+    seeds: 100
