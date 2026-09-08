@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import csv
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -31,7 +31,6 @@ from fe_gan.losses import (
     wgan_gen_loss,
 )
 from fe_gan.utils import (
-    Timer,
     get_system_info,
     hash_config,
     save_json,
@@ -69,6 +68,8 @@ class TrainerConfig:
     # Tail-GAN specific
     alpha: float = 0.05
     tailgan_wgan_weight: float = 0.5
+    tailgan_fz_loss_clip_value: float | None = None
+    generator_grad_clip_norm: float | None = None
 
     # Evaluation
     eval_every: int = 10
@@ -80,6 +81,17 @@ class TrainerConfig:
     # Output
     out_dir: str = "results/run"
     save_checkpoint: bool = False
+
+    def __post_init__(self) -> None:
+        """Validate values that affect training stability."""
+        if not 0.0 < self.alpha < 1.0:
+            raise ValueError("alpha must be between 0 and 1")
+        if not 0.0 <= self.tailgan_wgan_weight <= 1.0:
+            raise ValueError("tailgan_wgan_weight must be between 0 and 1")
+        if self.tailgan_fz_loss_clip_value is not None and self.tailgan_fz_loss_clip_value <= 0:
+            raise ValueError("tailgan_fz_loss_clip_value must be positive")
+        if self.generator_grad_clip_norm is not None and self.generator_grad_clip_norm <= 0:
+            raise ValueError("generator_grad_clip_norm must be positive")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -101,6 +113,8 @@ class TrainerConfig:
             "lr": self.lr,
             "alpha": self.alpha,
             "tailgan_wgan_weight": self.tailgan_wgan_weight,
+            "tailgan_fz_loss_clip_value": self.tailgan_fz_loss_clip_value,
+            "generator_grad_clip_norm": self.generator_grad_clip_norm,
             "eval_every": self.eval_every,
             "eval_samples": self.eval_samples,
             "seed": self.seed,
@@ -246,6 +260,7 @@ class Trainer:
                 wgan_weight=self.config.tailgan_wgan_weight,
                 fake_score=fake_score,
                 alpha=self.config.alpha,
+                fz_loss_clip_value=self.config.tailgan_fz_loss_clip_value,
             )
             # Also compute FZ loss for logging
             fz_loss = float(fissler_ziegel_loss(fake.detach(), self.config.alpha))
@@ -254,7 +269,16 @@ class Trainer:
             g_loss = wgan_gen_loss(fake_score)
             fz_loss = None
 
+        if not torch.isfinite(g_loss):
+            raise FloatingPointError(f"Non-finite generator loss for seed {self.config.seed}")
+
         g_loss.backward()
+        if self.config.generator_grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(
+                self.generator.parameters(),
+                max_norm=self.config.generator_grad_clip_norm,
+                error_if_nonfinite=True,
+            )
         self.opt_g.step()
 
         return float(g_loss.detach()), fz_loss

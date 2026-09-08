@@ -3,7 +3,6 @@
 import pytest
 import torch
 import torch.nn as nn
-import numpy as np
 from scipy import stats
 
 from fe_gan.losses import (
@@ -260,16 +259,12 @@ class TestFisslerZiegelScore:
         true_var, true_es = empirical_var_es(returns, alpha=0.05)
 
         # Score at true values
-        score_true = fissler_ziegel_score(
-            returns, true_var, true_es, alpha=0.05
-        )
+        score_true = fissler_ziegel_score(returns, true_var, true_es, alpha=0.05)
 
         # Score at perturbed values
         perturbed_var = true_var + 0.5
         perturbed_es = true_es + 0.5
-        score_perturbed = fissler_ziegel_score(
-            returns, perturbed_var, perturbed_es, alpha=0.05
-        )
+        score_perturbed = fissler_ziegel_score(returns, perturbed_var, perturbed_es, alpha=0.05)
 
         # The scores should be different (FZ is sensitive to VaR/ES)
         assert not torch.isclose(score_true, score_perturbed, atol=0.01), (
@@ -319,9 +314,7 @@ class TestTailGANLoss:
         fake_returns = torch.randn(8, 250)
         fake_score = torch.randn(8, 1)
 
-        loss = tail_gan_gen_loss(
-            fake_returns, wgan_weight=0.5, fake_score=fake_score
-        )
+        loss = tail_gan_gen_loss(fake_returns, wgan_weight=0.5, fake_score=fake_score)
 
         assert torch.isfinite(loss)
 
@@ -335,6 +328,42 @@ class TestTailGANLoss:
         assert fake_returns.grad is not None
         assert not torch.isnan(fake_returns.grad).any()
         assert torch.isfinite(fake_returns.grad).all()
+
+    def test_fz_loss_clamp_bounds_applied_component(self, monkeypatch):
+        """FZ clamp limits only the FZ component before loss combination."""
+        monkeypatch.setattr(
+            "fe_gan.losses.fissler_ziegel_loss",
+            lambda *_args, **_kwargs: torch.tensor(1_000.0),
+        )
+        fake_returns = torch.randn(8, 250)
+        fake_score = torch.zeros(8, 1)
+
+        loss = tail_gan_gen_loss(
+            fake_returns,
+            wgan_weight=0.5,
+            fake_score=fake_score,
+            fz_loss_clip_value=10.0,
+        )
+
+        assert torch.isclose(loss, torch.tensor(5.0))
+
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"wgan_weight": -0.1}, "wgan_weight"),
+            ({"wgan_weight": 1.1}, "wgan_weight"),
+            ({"fz_loss_clip_value": 0.0}, "fz_loss_clip_value"),
+        ],
+    )
+    def test_tail_gan_loss_rejects_invalid_settings(self, kwargs, message):
+        """Invalid stability settings fail before training."""
+        with pytest.raises(ValueError, match=message):
+            tail_gan_gen_loss(torch.randn(8, 250), **kwargs)
+
+    def test_tail_gan_loss_requires_scores_for_wgan_component(self):
+        """A weighted WGAN component requires critic scores."""
+        with pytest.raises(ValueError, match="fake_score"):
+            tail_gan_gen_loss(torch.randn(8, 250), wgan_weight=0.5)
 
 
 class TestVaRESError:

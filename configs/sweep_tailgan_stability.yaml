@@ -1,0 +1,15 @@
+# Tail-GAN stability ablation: two isolated mitigations, 100 paired seeds each
+workers: 10
+use_amp: true
+cudnn_benchmark: true
+
+configs:
+  - name: fegan_hist_tailgan_gradclip
+    path: configs/fegan_hist_tailgan_gradclip.yaml
+    epochs: 300
+    seeds: 100
+
+  - name: fegan_hist_tailgan_lossclip
+    path: configs/fegan_hist_tailgan_lossclip.yaml
+    epochs: 300
+    seeds: 100

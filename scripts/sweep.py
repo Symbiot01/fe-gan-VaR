@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-import os
-import sys
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -90,6 +89,8 @@ def run_single_task(
         lr=cfg.get("lr", 5e-5),
         alpha=cfg.get("alpha", 0.05),
         tailgan_wgan_weight=cfg.get("tailgan_wgan_weight", 0.5),
+        tailgan_fz_loss_clip_value=cfg.get("tailgan_fz_loss_clip_value"),
+        generator_grad_clip_norm=cfg.get("generator_grad_clip_norm"),
         eval_every=cfg.get("eval_every", 10),
         eval_samples=cfg.get("eval_samples", 1000),
         seed=task.seed,
@@ -207,10 +208,8 @@ def run_sweep_parallel(
         List of results.
     """
     # Set multiprocessing start method
-    try:
+    with suppress(RuntimeError):
         mp.set_start_method("spawn", force=True)
-    except RuntimeError:
-        pass  # Already set
 
     # Detect available GPUs
     n_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
@@ -328,10 +327,7 @@ def main():
 
     # Determine output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    if args.out:
-        out_dir = args.out
-    else:
-        out_dir = Path(f"results/sweep_{timestamp}")
+    out_dir = args.out or Path(f"results/sweep_{timestamp}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # Build task list

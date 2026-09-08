@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 import torch
@@ -26,12 +27,32 @@ class TestTrainerConfig:
 
     def test_config_to_dict(self):
         """Test config serialization."""
-        config = TrainerConfig(epochs=50, seed=42)
+        config = TrainerConfig(
+            epochs=50,
+            seed=42,
+            tailgan_fz_loss_clip_value=10.0,
+            generator_grad_clip_norm=1.0,
+        )
         d = config.to_dict()
 
         assert d["epochs"] == 50
         assert d["seed"] == 42
+        assert d["tailgan_fz_loss_clip_value"] == 10.0
+        assert d["generator_grad_clip_norm"] == 1.0
         assert isinstance(d, dict)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"tailgan_fz_loss_clip_value": 0.0},
+            {"generator_grad_clip_norm": 0.0},
+            {"tailgan_wgan_weight": 1.1},
+        ],
+    )
+    def test_invalid_stability_config_rejected(self, kwargs):
+        """Invalid stability controls fail fast."""
+        with pytest.raises(ValueError):
+            TrainerConfig(**kwargs)
 
 
 class TestTrainer:
@@ -226,6 +247,19 @@ class TestTailGANTrainer:
 
         # FZ loss should be recorded
         assert tailgan_trainer.metrics_history[-1].fz_loss is not None
+
+    def test_tailgan_applies_generator_gradient_clipping(self, tailgan_trainer, monkeypatch):
+        """Configured generator gradient clipping runs before optimizer step."""
+        tailgan_trainer.config.generator_grad_clip_norm = 1.0
+        clip_mock = Mock(return_value=torch.tensor(2.0))
+        monkeypatch.setattr(torch.nn.utils, "clip_grad_norm_", clip_mock)
+
+        real = tailgan_trainer._sample_batch()
+        tailgan_trainer._train_generator_step(real)
+
+        clip_mock.assert_called_once()
+        assert clip_mock.call_args.kwargs["max_norm"] == 1.0
+        assert clip_mock.call_args.kwargs["error_if_nonfinite"] is True
 
 
 class TestTrainModel:

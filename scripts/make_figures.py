@@ -13,13 +13,10 @@ Produces:
 from __future__ import annotations
 
 import argparse
-import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import seaborn as sns
 
 
 def load_aggregate(results_dir: Path) -> pd.DataFrame:
@@ -176,11 +173,15 @@ def convergence_plot(
         "baseline_wgan": "red",
         "fegan_hist_wgan": "green",
         "fegan_hist_tailgan": "blue",
+        "fegan_hist_tailgan_gradclip": "purple",
+        "fegan_hist_tailgan_lossclip": "orange",
     }
     labels = {
         "baseline_wgan": "Baseline WGAN",
         "fegan_hist_wgan": "FE-GAN (WGAN)",
         "fegan_hist_tailgan": "FE-GAN (Tail-GAN)",
+        "fegan_hist_tailgan_gradclip": "Tail-GAN (gradient clip)",
+        "fegan_hist_tailgan_lossclip": "Tail-GAN (FZ loss clamp)",
     }
 
     for config_name, dfs in metrics_by_config.items():
@@ -233,7 +234,7 @@ def wallclock_bar(df: pd.DataFrame, out_path: Path):
     fig, ax = plt.subplots(figsize=(8, 5))
 
     x = range(len(summary))
-    bars = ax.bar(
+    ax.bar(
         x,
         summary["mean"],
         yerr=summary["std"],
@@ -247,6 +248,38 @@ def wallclock_bar(df: pd.DataFrame, out_path: Path):
     ax.set_ylabel("Wall Clock Time (seconds)")
     ax.set_title("Training Time per Configuration")
     ax.grid(True, alpha=0.3, axis="y")
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {out_path}")
+
+
+def tailgan_stability_boxplot(df: pd.DataFrame, out_path: Path):
+    """Compare the two Tail-GAN numerical-stability ablations."""
+    config_labels = {
+        "fegan_hist_tailgan_gradclip": "Gradient clip",
+        "fegan_hist_tailgan_lossclip": "FZ loss clamp",
+    }
+    available = [config for config in config_labels if not df[df["config"] == config].empty]
+    if len(available) != len(config_labels):
+        print("  Warning: Missing configs for Tail-GAN stability figure")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    labels = [config_labels[config] for config in available]
+
+    for ax, column, title in [
+        (axes[0], "var_err_median", "Tail-GAN Stability: VaR Error"),
+        (axes[1], "es_err_median", "Tail-GAN Stability: ES Error"),
+    ]:
+        values = [df[df["config"] == config][column].dropna().values for config in available]
+        plot = ax.boxplot(values, labels=labels, patch_artist=True)
+        plot["boxes"][0].set_facecolor("plum")
+        plot["boxes"][1].set_facecolor("moccasin")
+        ax.set_ylabel(f"|{column.split('_')[0].upper()} Error|")
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -289,6 +322,10 @@ def main():
 
     fig3_var_es_boxplot(df, figures_dir / "fig3_var_es_boxplot.png")
     fig10_tailgan_boxplot(df, figures_dir / "fig10_tailgan_boxplot.png")
+    tailgan_stability_boxplot(
+        df,
+        figures_dir / "tailgan_stability_boxplot.png",
+    )
 
     if metrics_by_config:
         convergence_plot(metrics_by_config, figures_dir / "convergence_var.png")

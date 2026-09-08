@@ -104,6 +104,8 @@ def main():
         lr=cfg.get("lr", 5e-5),
         alpha=cfg.get("alpha", 0.05),
         tailgan_wgan_weight=cfg.get("tailgan_wgan_weight", 0.5),
+        tailgan_fz_loss_clip_value=cfg.get("tailgan_fz_loss_clip_value"),
+        generator_grad_clip_norm=cfg.get("generator_grad_clip_norm"),
         eval_every=cfg.get("eval_every", 10),
         eval_samples=cfg.get("eval_samples", 1000),
         seed=args.seed,
@@ -118,10 +120,7 @@ def main():
         config.out_dir = f"results/{config_name}_s{args.seed}"
 
     # Determine device
-    if args.device:
-        device = torch.device(args.device)
-    else:
-        device = get_device()
+    device = torch.device(args.device) if args.device else get_device()
 
     print(f"Configuration: {args.config.name}")
     print(f"  Model type: {config.model_type}")

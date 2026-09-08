@@ -92,6 +92,23 @@ Median \|VaR error\| by epoch (across seeds):
 
 **Verdict: Not verified.** Tail-GAN under this FZ0 + WGAN hybrid training is unstable / poorly calibrated on this sweep. Anchoring FZ to real VaR/ES in a prior experiment also failed (VaR/ES errors ~10). Treat Tail-GAN here as an incomplete reproduction of Cont et al., not a confirmation of Chen §3.
 
+### Tail-GAN failure analysis for this run
+
+- **51/100** Tail-GAN seeds finished with median VaR error above `1.0`; no WGAN seed did.
+- Across Tail-GAN seeds, median VaR error was `1.0127` (range `0.1123–4.2102`) and median ES error was `2.1793` (range `0.4322–6.5306`).
+- Generator/FZ losses show singular spikes. For example, seed 38 reached generator loss `633,623`; seed 0 reached `9,631,332`. Bad seed 38 continued to average generator loss `6,790` over epochs 250–300, so this is not merely noisy reporting.
+- Wall-clock time and error were effectively unrelated (`r≈0.07`), ruling out slow or overloaded workers as the main explanation.
+- The immediate numerical mechanism is FZ0 division by an ES estimate clamped near zero (`1 / safe_es`), which can create extremely large losses and gradients during early training.
+- The deeper limitation is objective fidelity: `fissler_ziegel_loss(fake)` estimates VaR/ES from generated returns and scores those estimates against the **same generated sample**. It neither matches generated tail statistics to real tail statistics nor reproduces the full Tail-GAN risk-estimation architecture. Gradient or loss clipping can test numerical stabilization, but cannot establish paper fidelity.
+- The attempted “real VaR/ES anchor” is not a valid correction: it optimized generated observations as if they were forecasts and diverged to VaR/ES errors around `10`. The roles in a strictly consistent scoring rule cannot be interchanged.
+
+Two isolated mitigation experiments are prepared for follow-up:
+
+1. **Generator gradient clipping:** cap the generator gradient norm at `1.0`.
+2. **FZ loss clamping:** cap only the FZ component to `[-10, 10]`, leaving the WGAN component unchanged.
+
+These variants must be reported as stability ablations, not as faithful Tail-GAN reproductions.
+
 ## Summary
 
 | Claim | Verified? | Notes |

@@ -20,7 +20,6 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-
 # =============================================================================
 # WGAN Losses
 # =============================================================================
@@ -328,6 +327,7 @@ def tail_gan_gen_loss(
     alpha: float = 0.05,
     wgan_weight: float = 0.0,
     fake_score: Tensor | None = None,
+    fz_loss_clip_value: float | None = None,
 ) -> Tensor:
     """Tail-GAN generator loss combining WGAN and FZ losses.
 
@@ -344,18 +344,34 @@ def tail_gan_gen_loss(
         alpha: Risk level for VaR/ES.
         wgan_weight: Weight for WGAN loss (0 = pure FZ, 1 = pure WGAN).
         fake_score: Critic scores for generated samples (needed if wgan_weight > 0).
+        fz_loss_clip_value: Optional symmetric clamp for the scalar FZ component.
+            Values outside ``[-value, value]`` receive zero FZ gradient, while
+            the WGAN component continues to train. Intended as a numerical
+            stability ablation, not a change to the FZ scoring rule.
 
     Returns:
         Scalar loss tensor.
     """
+    if not 0.0 <= wgan_weight <= 1.0:
+        raise ValueError("wgan_weight must be between 0 and 1")
+    if wgan_weight > 0 and fake_score is None:
+        raise ValueError("fake_score is required when wgan_weight is greater than 0")
+    if fz_loss_clip_value is not None and fz_loss_clip_value <= 0:
+        raise ValueError("fz_loss_clip_value must be positive when provided")
+
     # FZ loss component
     fz_loss = fissler_ziegel_loss(fake_returns, alpha)
+    if fz_loss_clip_value is not None:
+        fz_loss = torch.clamp(
+            fz_loss,
+            min=-fz_loss_clip_value,
+            max=fz_loss_clip_value,
+        )
 
-    if wgan_weight > 0 and fake_score is not None:
+    if wgan_weight > 0:
         wgan_loss = wgan_gen_loss(fake_score)
         return wgan_weight * wgan_loss + (1 - wgan_weight) * fz_loss
-    else:
-        return fz_loss
+    return fz_loss
 
 
 # =============================================================================

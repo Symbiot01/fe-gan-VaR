@@ -1,0 +1,30 @@
+# Tail-GAN numerical-stability ablation: FZ loss clamping only
+model_type: fegan
+loss_type: tailgan
+
+# Architecture
+noise_dim: 100
+gen_depth: 10
+gen_width: 1000
+critic_depth: 5
+critic_width: 100
+hist_dim: 250
+preproc_hidden: 512
+preproc_feat_dim: 250
+
+# Training
+epochs: 300
+batch_size: 100
+n_critic: 5
+clip_value: 0.01
+lr: 5.0e-5
+
+# Tail-GAN stability experiment
+alpha: 0.05
+tailgan_wgan_weight: 0.5
+generator_grad_clip_norm: null
+tailgan_fz_loss_clip_value: 10.0
+
+# Evaluation
+eval_every: 10
+eval_samples: 1000
