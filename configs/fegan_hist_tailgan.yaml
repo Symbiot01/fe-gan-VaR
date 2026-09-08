@@ -1,5 +1,5 @@
 # FE-GAN with historical context and Tail-GAN loss
-# Paper: 100 epochs, uses Fissler-Ziegel score for tail risk
+# Note: Paper claims 100 epochs, but empirical testing shows 200+ needed to converge
 model_type: fegan
 loss_type: tailgan
 
@@ -14,7 +14,7 @@ preproc_hidden: 512
 preproc_feat_dim: 250
 
 # Training
-epochs: 100
+epochs: 300
 batch_size: 100
 n_critic: 5
 clip_value: 0.01
