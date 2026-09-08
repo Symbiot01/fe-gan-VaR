@@ -106,6 +106,12 @@ def evaluate_generator(
 
     Generates synthetic windows and compares their VaR/ES to real windows.
 
+    For WGAN: Generate n_samples windows, compare to real windows pairwise.
+    For FE-GAN: For each real window, use it as history to generate a window,
+                then compare the generated window to that same real window.
+                This tests if the generator can produce windows with similar
+                risk characteristics when conditioned on real data.
+
     Args:
         generator: Trained generator model.
         real_windows: Real evaluation windows [M, T].
@@ -123,22 +129,36 @@ def evaluate_generator(
 
     # Move real windows to device
     real_windows = real_windows.to(device)
+    n_real = len(real_windows)
 
     with torch.no_grad():
-        # Generate synthetic windows
-        z = torch.randn(n_samples, noise_dim, device=device)
-
         if is_fegan:
-            # For FE-GAN, use real windows as history context
-            # Sample random real windows to condition on
-            hist_idx = torch.randint(len(real_windows), (n_samples,))
-            history = real_windows[hist_idx]
-            generated = generator(z, history)
-        else:
-            generated = generator(z)
+            # For FE-GAN: generate multiple samples per real window, then average
+            # Use each real window as history, generate samples, compare to that window
+            samples_per_window = max(1, n_samples // n_real)
+            all_generated = []
+            all_history_idx = []
 
-    # Compute errors
-    error_data = compute_var_es_errors(generated, real_windows, alpha)
+            for i in range(n_real):
+                z = torch.randn(samples_per_window, noise_dim, device=device)
+                history = real_windows[i : i + 1].expand(samples_per_window, -1)
+                gen_samples = generator(z, history)
+                all_generated.append(gen_samples)
+                all_history_idx.extend([i] * samples_per_window)
+
+            generated = torch.cat(all_generated, dim=0)
+            history_idx = torch.tensor(all_history_idx, device=device)
+
+            # Compare each generated window to the real window used as its history
+            compare_to = real_windows[history_idx]
+        else:
+            # For WGAN: generate n_samples windows, compare pairwise to real
+            z = torch.randn(n_samples, noise_dim, device=device)
+            generated = generator(z)
+            compare_to = real_windows
+
+    # Compute errors between generated and corresponding real windows
+    error_data = compute_var_es_errors(generated, compare_to, alpha)
 
     # Compute summary metrics
     metrics = compute_eval_metrics(
@@ -147,8 +167,8 @@ def evaluate_generator(
     )
 
     # Add sample counts
-    metrics["n_generated"] = n_samples
-    metrics["n_real"] = len(real_windows)
+    metrics["n_generated"] = len(generated)
+    metrics["n_real"] = n_real
     metrics["alpha"] = alpha
 
     return metrics
