@@ -18,7 +18,7 @@ import random
 import subprocess
 import time
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -125,7 +125,7 @@ class JSONLogger:
             **kwargs: Key-value pairs to log.
         """
         entry = {
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             **kwargs,
         }
         with open(self.path, "a") as f:
@@ -138,7 +138,7 @@ class JSONLogger:
             data: Dictionary to log.
         """
         entry = {
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             **data,
         }
         with open(self.path, "a") as f:
@@ -202,7 +202,7 @@ def get_system_info() -> dict[str, Any]:
         "cuda_available": torch.cuda.is_available(),
         "git_sha": git_sha(),
         "hostname": os.uname().nodename,
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     if torch.cuda.is_available():

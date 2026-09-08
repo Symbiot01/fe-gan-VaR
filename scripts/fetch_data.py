@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -198,7 +198,7 @@ def save_with_header(df: pd.DataFrame, path: Path, source_url: str) -> str:
     data_sha256 = compute_sha256(data_csv)
 
     # Create header comment
-    timestamp = datetime.now(UTC).isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     header = f"""# VIX Historical Data for FE-GAN Verification
 # Source: {source_url}
 # Date range: {START_DATE} to {END_DATE}
