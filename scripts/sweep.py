@@ -120,6 +120,7 @@ def worker_fn(
     tasks: list[SweepTask],
     results_queue: mp.Queue,
     use_amp: bool,
+    n_gpus: int = 1,
 ):
     """Worker function for multiprocessing.
 
@@ -129,11 +130,14 @@ def worker_fn(
         tasks: List of all tasks.
         results_queue: Queue to put results.
         use_amp: Whether to use AMP (not used with bf16).
+        n_gpus: Number of available GPUs (for multi-GPU distribution).
     """
-    device = torch.device("cuda")
-    torch.cuda.set_device(0)  # Single GPU
+    # Distribute workers across GPUs: worker i uses GPU (i % n_gpus)
+    gpu_id = rank % n_gpus
+    device = torch.device(f"cuda:{gpu_id}")
+    torch.cuda.set_device(gpu_id)
 
-    # Load data once per worker
+    # Load data once per worker (on assigned GPU)
     train_data, eval_data = load_vix_dataset(
         window_size=250,
         n_eval=100,
@@ -191,6 +195,9 @@ def run_sweep_parallel(
 ) -> list[dict[str, Any]]:
     """Run sweep with parallel workers using multiprocessing.
 
+    Automatically distributes workers across all available GPUs.
+    E.g., with 16 workers and 8 GPUs, each GPU runs 2 workers.
+
     Args:
         tasks: List of tasks.
         workers: Number of parallel workers.
@@ -205,6 +212,12 @@ def run_sweep_parallel(
     except RuntimeError:
         pass  # Already set
 
+    # Detect available GPUs
+    n_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+    print(f"GPUs available: {n_gpus}")
+    if n_gpus > 1:
+        print(f"Multi-GPU mode: {workers} workers across {n_gpus} GPUs")
+
     results_queue = mp.Queue()
 
     # Start workers
@@ -212,7 +225,7 @@ def run_sweep_parallel(
     for rank in range(workers):
         p = mp.Process(
             target=worker_fn,
-            args=(rank, workers, tasks, results_queue, use_amp),
+            args=(rank, workers, tasks, results_queue, use_amp, n_gpus),
         )
         p.start()
         processes.append(p)

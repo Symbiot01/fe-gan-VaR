@@ -1,16 +1,20 @@
 #!/bin/bash
-# A100 Pipeline: sweep + aggregate + figures in one command
+# GPU Pipeline: sweep + aggregate + figures in one command
 #
 # Usage:
 #   bash scripts/a100_pipeline.sh              # Full sweep (3 configs x 100 seeds)
 #   bash scripts/a100_pipeline.sh --dry-run    # Smoke test (2 seeds x 1 config x 5 epochs)
 #   bash scripts/a100_pipeline.sh --workers 20 # Use 20 parallel workers
 #
-# This script is designed to run on an A100 VM. It:
+# This script auto-detects GPUs and sets workers accordingly:
+#   - 1 GPU (e.g., A100): 10 workers
+#   - 8 GPUs (e.g., 8x L4): 24 workers (3 per GPU)
+#
+# Steps:
 # 1. Verifies data integrity (SHA256 check)
 # 2. Runs unit tests
 # 3. Runs smoke tests (unless --skip-smoke)
-# 4. Runs the full sweep
+# 4. Runs the full sweep (multi-GPU if available)
 # 5. Aggregates results
 # 6. Generates figures
 #
@@ -18,8 +22,18 @@
 
 set -e  # Exit on error
 
+# Auto-detect GPU count and set default workers
+N_GPUS=$(python -c "import torch; print(torch.cuda.device_count())" 2>/dev/null || echo "1")
+if [ "$N_GPUS" -gt 1 ]; then
+    # Multi-GPU: 3 workers per GPU
+    DEFAULT_WORKERS=$((N_GPUS * 3))
+else
+    # Single GPU: 10 workers
+    DEFAULT_WORKERS=10
+fi
+
 # Defaults
-WORKERS=${WORKERS:-10}
+WORKERS=${WORKERS:-$DEFAULT_WORKERS}
 DRY_RUN=false
 SKIP_SMOKE=false
 
@@ -46,8 +60,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "=========================================="
-echo "FE-GAN A100 Pipeline"
+echo "FE-GAN GPU Pipeline"
 echo "=========================================="
+echo "GPUs detected: $N_GPUS"
 echo "Workers: $WORKERS"
 echo "Dry run: $DRY_RUN"
 echo "Skip smoke: $SKIP_SMOKE"
